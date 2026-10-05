@@ -15,3 +15,7 @@ logs/
 .DS_Store
 .idea/
 .vscode/
+*.onnx
+*.pt
+*.engine
+*.torchscript
