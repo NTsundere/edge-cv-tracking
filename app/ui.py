@@ -1,11 +1,12 @@
-"""
-Streamlit UI для Edge CV Tracking.
-Запуск: streamlit run app/ui.py
-"""
 import io
+import os
+import tempfile
 import time
+import urllib.request
+
 import cv2
 import numpy as np
+import pandas as pd
 import streamlit as st
 from PIL import Image
 
@@ -13,17 +14,17 @@ from app.detector import Detector, COCO_CLASSES
 from app.tracker import SimpleTracker
 from app.config import settings
 
+TEST_VIDEO_URL = "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/person-bicycle-car-detection.mp4"
+TEST_VIDEO_PATH = "data/samples/test_urban_highway.mp4"
 
 st.set_page_config(
     page_title="Edge CV Tracking",
-    page_icon="🎯",
     layout="wide",
 )
 
 st.title("Edge CV Tracking")
 st.markdown(
-    "**YOLOv8n + ByteTrack на ONNX Runtime** — детекция и трекинг объектов в реальном времени. "
-    "Работает на CPU, оптимизировано для Edge-устройств."
+    "**YOLOv8n + ONNX Runtime** — детекция и трекинг объектов. Работает на CPU, оптимизировано для Edge-устройств."
 )
 
 with st.sidebar:
@@ -33,11 +34,11 @@ with st.sidebar:
         "Модель",
         ["models/yolov8n.onnx", "models/yolov8n_int8.onnx"],
         index=0,
-        help="FP32 — точнее, INT8 — меньше размер",
+        help="FP32 точнее, INT8 меньше по размеру",
     )
 
     conf_threshold = st.slider(
-        "Порог уверенности (confidence)",
+        "Порог уверенности",
         min_value=0.1,
         max_value=0.9,
         value=0.4,
@@ -57,20 +58,18 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### О проекте")
     st.markdown(
-        "- **Детекция**: YOLOv8n, 80 классов COCO\n"
-        "- **Трекинг**: IoU-matching\n"
-        "- **Инференс**: ONNX Runtime (CPU)\n"
-        "- **Квантизация**: INT8 dynamic"
+        "- Детекция: YOLOv8n, 80 классов COCO\n"
+        "- Трекинг: IoU-matching\n"
+        "- Инференс: ONNX Runtime (CPU)\n"
+        "- Квантизация: INT8 dynamic"
     )
 
 
 @st.cache_resource
 def load_detector(model_path: str, conf: float, iou: float):
-    # Переопределяем пороги в settings
     settings.conf_threshold = conf
     settings.iou_threshold = iou
-    detector = Detector(model_path=model_path)
-    return detector
+    return Detector(model_path=model_path)
 
 
 @st.cache_resource
@@ -106,7 +105,14 @@ def draw_detections(image: np.ndarray, detections: list) -> np.ndarray:
     return img
 
 
-tab1, tab2, tab3 = st.tabs(["📷 Изображение", "🎬 Видео", "📊 О модели"])
+def download_test_video() -> str:
+    os.makedirs("data/samples", exist_ok=True)
+    if not os.path.exists(TEST_VIDEO_PATH):
+        urllib.request.urlretrieve(TEST_VIDEO_URL, TEST_VIDEO_PATH)
+    return TEST_VIDEO_PATH
+
+
+tab1, tab2, tab3, tab4 = st.tabs(["Изображение", "Видео", "О модели", "О проекте"])
 
 with tab1:
     st.header("Детекция объектов на изображении")
@@ -153,7 +159,6 @@ with tab1:
 
         if detections:
             st.markdown("### Детали детекций")
-            import pandas as pd
             df = pd.DataFrame([
                 {
                     "Класс": d["class_name"],
@@ -186,22 +191,37 @@ with tab1:
 
 with tab2:
     st.header("Детекция и трекинг на видео")
-    st.caption("Обрабатывается покадрово на CPU — для длинных видео это займёт время.")
+    st.caption("Обрабатывается покадрово на CPU. Для длинных видео это займёт время.")
 
-    uploaded_video = st.file_uploader(
-        "Загрузите видео (MP4, AVI, MOV)",
-        type=["mp4", "avi", "mov"],
-        key="video_upload",
+    source = st.radio(
+        "Источник видео",
+        ["Загрузить своё", "Использовать тестовое видео"],
+        horizontal=True,
     )
 
-    if uploaded_video is not None:
-        import tempfile
-        import os
-        temp_path = os.path.join(tempfile.gettempdir(), "uploaded_video.mp4")
-        with open(temp_path, "wb") as f:
-            f.write(uploaded_video.read())
+    video_path = None
 
-        cap = cv2.VideoCapture(temp_path)
+    if source == "Загрузить своё":
+        uploaded_video = st.file_uploader(
+            "Загрузите видео (MP4, AVI, MOV)",
+            type=["mp4", "avi", "mov"],
+            key="video_upload",
+        )
+        if uploaded_video is not None:
+            temp_path = os.path.join(tempfile.gettempdir(), "uploaded_video.mp4")
+            with open(temp_path, "wb") as f:
+                f.write(uploaded_video.read())
+            video_path = temp_path
+    else:
+        if st.button("Загрузить тестовое видео"):
+            with st.spinner("Скачивание тестового видео..."):
+                video_path = download_test_video()
+            st.success("Тестовое видео загружено")
+        if os.path.exists(TEST_VIDEO_PATH):
+            video_path = TEST_VIDEO_PATH
+
+    if video_path is not None:
+        cap = cv2.VideoCapture(video_path)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps_src = cap.get(cv2.CAP_PROP_FPS)
         st.write(f"**Видео:** {total_frames} кадров, {fps_src:.1f} FPS источник")
@@ -268,7 +288,7 @@ with tab2:
 
                 with open(out_path, "rb") as f:
                     st.download_button(
-                        "💾 Скачать обработанное видео",
+                        "Скачать обработанное видео",
                         f.read(),
                         file_name="tracking_result.mp4",
                         mime="video/mp4",
@@ -280,17 +300,16 @@ with tab3:
     st.markdown("### Архитектура пайплайна")
     st.code(
         """
-Изображение → Препроцессинг (resize 640x640, normalize)
-            → ONNX Runtime Inference (YOLOv8n)
-            → Постпроцессинг (NMS, scale to original)
-            → Трекинг (IoU-matching)
-            → Аннотированное изображение + метрики
+Изображение -> Препроцессинг (resize 640x640, normalize)
+            -> ONNX Runtime Inference (YOLOv8n)
+            -> Постпроцессинг (NMS, scale to original)
+            -> Трекинг (IoU-matching)
+            -> Аннотированное изображение + метрики
         """,
         language="text",
     )
 
     st.markdown("### Бенчмарки (AMD Ryzen 7 4800H, ONNX Runtime CPU)")
-    import pandas as pd
     bench_df = pd.DataFrame([
         {"Модель": "YOLOv8n FP32", "Размер (MB)": 12.23, "Latency (ms)": 62.07, "FPS": 16.1},
         {"Модель": "YOLOv8n INT8", "Размер (MB)": 3.33, "Latency (ms)": 100.53, "FPS": 9.9},
@@ -299,9 +318,8 @@ with tab3:
 
     st.info(
         "**Почему INT8 медленнее?** Dynamic quantization квантует только веса, "
-        "активации остаются FP32 — на каждом слое происходит dequant/quant. "
-        "На CPU без VNNI-инструкций это даёт оверхед. Реальное ускорение INT8 "
-        "требует TensorRT (Jetson) или Intel VNNI (Ice Lake+)."
+        "активации остаются FP32. На CPU без VNNI-инструкций это даёт оверхед. "
+        "Реальное ускорение INT8 требует TensorRT (Jetson) или Intel VNNI."
     )
 
     st.markdown("### 80 классов COCO")
@@ -311,9 +329,95 @@ with tab3:
     })
     st.dataframe(classes_df, use_container_width=True, height=300)
 
+with tab4:
+    st.header("О проекте")
+    st.caption("Обоснование архитектурных решений и ответы на возможные вопросы.")
+
+    with st.expander("Выбор модели детекции: YOLOv8n"):
+        st.markdown("""
+**Аналоги:** YOLOv5, YOLOv7, YOLOv9, YOLOv10, SSD, Faster R-CNN, EfficientDet.
+
+**Почему YOLOv8n:**
+- Ultralytics v8 — самая зрелая версия с поддержкой TensorRT 11 и INT8-квантизации.
+- YOLOv8n (nano) — лучший баланс скорости и точности на edge: 64.08% mAP@0.5:0.95 при 12 ms latency на Raspberry Pi 4.
+- Размер модели 6.2 MB (PyTorch), 12.2 MB (ONNX) — идеально для встраиваемых устройств.
+- Встроенный трекинг (ByteTrack) и экспорт в ONNX из коробки.
+
+**Почему не SSD или Faster R-CNN:** SSD менее точен на мелких объектах, Faster R-CNN слишком тяжёлый для edge. YOLOv9/10/11/12 новее, но с меньшим количеством production-кейсов.
+""")
+
+    with st.expander("Выбор среды исполнения: ONNX Runtime"):
+        st.markdown("""
+**Аналоги:** TensorFlow Lite, OpenVINO, TensorRT, PyTorch JIT.
+
+**Почему ONNX Runtime:**
+- Кроссплатформенный: работает на CPU, GPU, edge-устройствах без изменения кода.
+- Поддерживает INT8-квантизацию через `onnxruntime.quantization`.
+- Не требует привязки к конкретному фреймворку (PyTorch, TensorFlow).
+- Доступен на Windows, Linux, macOS, ARM.
+
+**Почему не TensorRT:** TensorRT требует NVIDIA GPU, недоступен на CPU. ONNX Runtime даёт переносимый код, который можно позже переключить на TensorRT через провайдеры.
+""")
+
+    with st.expander("Выбор квантизации: INT8 Dynamic"):
+        st.markdown("""
+**Аналоги:** FP16, INT8 Static, INT8 QAT.
+
+**Почему INT8 Dynamic:**
+- Не требует калибровочного датасета (в отличие от Static и QAT).
+- Уменьшает размер модели в 3.7 раза (12.23 MB -> 3.33 MB).
+- Прост в реализации: одна функция `quantize_dynamic`.
+
+**Почему INT8 медленнее на CPU:** Dynamic quantization квантует только веса, активации остаются FP32. На каждом слое происходит dequant/quant. На CPU без VNNI (Intel Ice Lake+) это даёт оверхед. На ARM (Raspberry Pi) и NVIDIA (TensorRT) INT8 даёт реальное ускорение.
+""")
+
+    with st.expander("Выбор трекера: IoU-matching"):
+        st.markdown("""
+**Аналоги:** ByteTrack, DeepSORT, SORT, OC-SORT.
+
+**Почему IoU-matching:**
+- Не требует дополнительных зависимостей и моделей.
+- Прост в реализации: 30 строк кода.
+- Достаточен для коротких видео и демонстрации трекинга.
+
+**Почему не ByteTrack:** ByteTrack требует интеграции с ultralytics и дополнительных настроек. Для production рекомендуется ByteTrack, но для демонстрации IoU-matching достаточен.
+""")
+
+    with st.expander("Выбор UI: Streamlit"):
+        st.markdown("""
+**Аналоги:** Gradio, FastAPI + HTML, Flask, Dash.
+
+**Почему Streamlit:**
+- Быстрый старт: 50 строк кода дают полноценный веб-интерфейс.
+- Поддержка загрузки файлов, прогресс-баров, метрик, таблиц из коробки.
+- Не требует знания HTML/CSS/JS.
+
+**Почему не Gradio:** Gradio лучше для демонстрации ML-моделей, но менее гибок для многостраничных интерфейсов.
+""")
+
+    with st.expander("Ограничения и компромиссы"):
+        st.markdown("""
+**INT8 не ускоряет на CPU без VNNI.** Это не баг, а особенность архитектуры. Для реального edge-ускорения нужны TensorRT (Jetson), OpenVINO (Intel) или ARM Neon (Raspberry Pi).
+
+**Трекер не использует нейросети.** IoU-matching не восстанавливает треки после перекрытий. Для production рекомендуется ByteTrack или DeepSORT.
+
+**Нет GPU-инференса.** ONNX Runtime может использовать CUDA, но в текущей конфигурации провайдеры только CPU и Azure. Для GPU нужно установить `onnxruntime-gpu`.
+
+**Нет мониторинга.** Метрики latency/FPS выводятся в UI, но не сохраняются. Для production нужен Prometheus или Grafana.
+""")
+
+    with st.expander("Что можно улучшить"):
+        st.markdown("""
+- Добавить ByteTrack из ultralytics для production-трекинга.
+- Добавить TensorRT-экспорт для NVIDIA Jetson.
+- Добавить OpenVINO для Intel CPU.
+- Добавить мониторинг latency через Prometheus.
+- Добавить поддержку RTSP-потоков для реального видео.
+- Добавить CI/CD с автоматическим бенчмарком.
+""")
 
 st.markdown("---")
 st.markdown(
-    "Сделано на **YOLOv8n** + **ONNX Runtime** + **Streamlit**. "
+    "Сделано на YOLOv8n + ONNX Runtime + Streamlit. "
     "GitHub: [NTsundere/edge-cv-tracking](https://github.com/NTsundere/edge-cv-tracking)"
 )
