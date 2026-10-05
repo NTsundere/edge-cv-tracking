@@ -5,9 +5,6 @@ from app.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# Простой IoU-based трекер (замена ByteTrack без внешних зависимостей)
-# Для production используй ultralytics YOLO.track() с bytetrack.yaml
-
 
 def iou(box1, box2):
     x1 = max(box1[0], box2[0])
@@ -25,7 +22,7 @@ class SimpleTracker:
     def __init__(self, iou_threshold=0.3, max_age=30):
         self.iou_threshold = iou_threshold
         self.max_age = max_age
-        self.tracks = {}  # track_id -> {"bbox": ..., "age": ...}
+        self.tracks = {} 
         self.next_id = 1
 
     def update(self, detections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -52,7 +49,6 @@ class SimpleTracker:
                 self.tracks[self.next_id] = {"bbox": det["bbox"], "age": 0}
                 self.next_id += 1
 
-        # Increment age of unmatched tracks, remove old ones
         for tid in list(self.tracks.keys()):
             if tid not in matched:
                 self.tracks[tid]["age"] += 1

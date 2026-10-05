@@ -50,11 +50,11 @@ class Detector:
 
     def postprocess(self, output: np.ndarray, orig_shape: tuple) -> List[Dict[str, Any]]:
         """YOLOv8 output: [1, 84, 8400] -> detections."""
-        output = output[0]  # [84, 8400]
-        output = output.T   # [8400, 84]
+        output = output[0] 
+        output = output.T   
 
-        boxes = output[:, :4]      # cx, cy, w, h
-        scores = output[:, 4:]     # class scores
+        boxes = output[:, :4]      
+        scores = output[:, 4:]    
 
         class_ids = np.argmax(scores, axis=1)
         confidences = np.max(scores, axis=1)
@@ -65,20 +65,17 @@ class Detector:
         if len(boxes) == 0:
             return []
 
-        # cxcywh -> xyxy
         x1 = boxes[:, 0] - boxes[:, 2] / 2
         y1 = boxes[:, 1] - boxes[:, 3] / 2
         x2 = boxes[:, 0] + boxes[:, 2] / 2
         y2 = boxes[:, 1] + boxes[:, 3] / 2
 
-        # Scale to original image
         h_orig, w_orig = orig_shape[:2]
         x1 = x1 * w_orig / settings.img_size
         y1 = y1 * h_orig / settings.img_size
         x2 = x2 * w_orig / settings.img_size
         y2 = y2 * h_orig / settings.img_size
 
-        # NMS
         boxes_xyxy = np.stack([x1, y1, x2, y2], axis=1)
         indices = cv2.dnn.NMSBoxes(
             boxes_xyxy.tolist(),

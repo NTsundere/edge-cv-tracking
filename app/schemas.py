@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 
 class Detection(BaseModel):
-    bbox: List[float]  # [x1, y1, x2, y2]
+    bbox: List[float]  
     confidence: float
     class_id: int
     class_name: str
