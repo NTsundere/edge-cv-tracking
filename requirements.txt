@@ -1,0 +1,19 @@
+# Core
+fastapi>=0.115.6,<1.0
+uvicorn[standard]>=0.34.0,<1.0
+pydantic>=2.10.4,<3.0
+pydantic-settings>=2.7.0,<3.0
+python-dotenv>=1.0.1,<2.0
+
+# CV & Inference
+ultralytics>=8.3.0
+onnx>=1.16.0
+onnxruntime>=1.19.0
+opencv-python-headless>=4.10.0
+numpy>=1.26.0
+Pillow>=10.0.0
+
+# Utils
+python-multipart>=0.0.9
+tenacity>=9.0.0,<10.0
+streamlit>=1.40.0

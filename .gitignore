@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+.coverage
+models/*.onnx
+models/*.pt
+models/*.engine
+data/calib/*
+data/samples/*
+!data/.gitkeep
+*.log
+logs/
+.DS_Store
+.idea/
+.vscode/
